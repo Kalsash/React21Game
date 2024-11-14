@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Pie, Line } from 'react-chartjs-2';
+import { Pie, Line } from 'react-chartjs-2'; // Импортируем круговую диаграмму и линейный график
 import {
   Chart as ChartJS,
   ArcElement,
@@ -9,7 +9,7 @@ import {
   PointElement,
   LinearScale,
   CategoryScale,
-} from 'chart.js';
+} from 'chart.js';  // Импортируем необходимые модули Chart.js
 import './App.css';
 
 // Регистрируем компоненты
@@ -24,7 +24,6 @@ ChartJS.register(
 );
 
 function App() {
-  // Состояние и рефы
   const [bankAmount, setBankAmount] = useState(1000);
   const [deckId, setDeckId] = useState(null);
   const playerScoreRef = useRef(0);
@@ -34,12 +33,14 @@ function App() {
   const [playerBets, setPlayerBets] = useState(100);
   const [gameHistory, setGameHistory] = useState([]);
   const [resultMessage, setResultMessage] = useState('');
-  const [showBetAmount, setShowBetAmount] = useState(true);
+  const [showBetAmount, setShowBetAmount] = useState(false);
   const [resultsCount, setResultsCount] = useState({ wins: 0, losses: 0, ties: 0 });
   const [cardsDealt, setCardsDealt] = useState(false);
   const [buttonsDisabled, setButtonsDisabled] = useState(false);
-  const [bankHistory, setBankHistory] = useState([bankAmount]);
+  const [bankHistory, setBankHistory] = useState([]); // Для графика подсчета банка
+  const [isBetButtonDisabled, setIsBetButtonDisabled] = useState(false); // Новое состояние для кнопки
 
+  // Эффект для загрузки колоды карт после монтирования
   useEffect(() => {
     const fetchDeck = async () => {
       try {
@@ -61,9 +62,14 @@ function App() {
       return;
     }
 
+    setIsBetButtonDisabled(true); // Отключаем кнопку "Выбрать ставку"
     setShowBetAmount(false);
-    resetGameStates();
-
+    setPlayerCards([]);
+    setBankerCards([]);
+    playerScoreRef.current = 0;
+    bankerScoreRef.current = 0;
+    setCardsDealt(false);
+    
     try {
       await drawPlayerCard();
       await drawBankerCard();
@@ -77,6 +83,7 @@ function App() {
 
   const drawPlayerCard = async () => {
     if (!deckId) return;
+
     try {
       const response = await fetch(`https://deckofcardsapi.com/api/deck/${deckId}/draw/?count=1`);
       const data = await response.json();
@@ -90,9 +97,6 @@ function App() {
       setPlayerCards(prev => [...prev, card]);
       playerScoreRef.current += getCardValue(card);
       checkPlayerScore();
-
-      setButtonsDisabled(true);
-      setTimeout(() => setButtonsDisabled(false), 1000);
     } catch (error) {
       console.error("Ошибка при вытаскивании карты: ", error);
       alert("Не удалось вытащить карту. Попробуйте еще раз.");
@@ -101,6 +105,7 @@ function App() {
 
   const drawBankerCard = async () => {
     if (!deckId) return;
+
     try {
       const response = await fetch(`https://deckofcardsapi.com/api/deck/${deckId}/draw/?count=1`);
       const data = await response.json();
@@ -114,9 +119,6 @@ function App() {
       setBankerCards(prev => [...prev, card]);
       bankerScoreRef.current += getCardValue(card);
       checkBankerScore();
-
-      setButtonsDisabled(true);
-      setTimeout(() => setButtonsDisabled(false), 1000);
     } catch (error) {
       console.error("Ошибка при вытаскивании карты банкира: ", error);
       alert("Не удалось вытащить карту банкира. Попробуйте еще раз.");
@@ -137,12 +139,14 @@ function App() {
       showResult("Перебор! Вы проиграли.");
       setResultsCount(prev => ({ ...prev, losses: prev.losses + 1 }));
       setCardsDealt(false);
+      updateBankHistory();
     } else if (playerScoreRef.current === 21) {
       showResult("Поздравляем! Вы набрали 21 очко!");
       setBankAmount(prev => prev + playerBets * 2);
       setResultsCount(prev => ({ ...prev, wins: prev.wins + 1 }));
+      updateBankHistory();
     }
-    updateBankHistory();
+
   };
 
   const checkBankerScore = () => {
@@ -150,8 +154,9 @@ function App() {
       showResult("Банкир перебрал! Вы выиграли.");
       setResultsCount(prev => ({ ...prev, wins: prev.wins + 1 }));
       setCardsDealt(false);
+      updateBankHistory();
     }
-    updateBankHistory();
+
   };
 
   const endPlayerTurn = () => {
@@ -173,23 +178,30 @@ function App() {
       message = "Банкир перебрал! Вы выиграли.";
       setBankAmount(prev => prev + playerBets * 2);
       setResultsCount(prev => ({ ...prev, wins: prev.wins + 1 }));
+      updateBankHistory();
     } else if (playerScoreRef.current > bankerScoreRef.current) {
       message = "Поздравляем! Вы выиграли.";
       setBankAmount(prev => prev + playerBets * 2);
       setResultsCount(prev => ({ ...prev, wins: prev.wins + 1 }));
+      updateBankHistory();
     } else if (playerScoreRef.current < bankerScoreRef.current) {
       message = "Вы проиграли!";
       setResultsCount(prev => ({ ...prev, losses: prev.losses + 1 }));
+      updateBankHistory();
     } else {
       message = "Ничья, ваши ставки возвращаются.";
       setBankAmount(prev => prev + playerBets);
       setResultsCount(prev => ({ ...prev, ties: prev.ties + 1 }));
+      updateBankHistory();
     }
 
     setResultMessage(message);
     const historyEntry = { result: message, bankAmount, playerScore: playerScoreRef.current, bankerScore: bankerScoreRef.current, playerBets };
     setGameHistory(prev => [...prev, historyEntry]);
     setCardsDealt(false);
+
+    // Включаем кнопку "Выбрать ставку" в конце партии
+    setIsBetButtonDisabled(false);
 
     if (bankAmount <= 0) {
       setTimeout(() => {
@@ -201,9 +213,14 @@ function App() {
 
   const showResult = (message) => {
     setResultMessage(message);
-    setTimeout(() => {
-      resetGame();
-    }, 2000);
+    if (bankAmount < 100) {
+      setTimeout(() => {
+        alert("Игра завершена! У вас недостаточно средств для продолжения.");
+        window.location.reload();
+      }, 2000);
+    } else {
+      setTimeout(resetGame, 2000);
+    }
   };
 
   const resetGame = () => {
@@ -213,13 +230,9 @@ function App() {
     bankerScoreRef.current = 0;
     setShowBetAmount(true);
     setCardsDealt(false);
-  };
 
-  const resetGameStates = () => {
-    setPlayerCards([]);
-    setBankerCards([]);
-    playerScoreRef.current = 0;
-    bankerScoreRef.current = 0;
+    // Включаем кнопку "Выбрать ставку"
+    setIsBetButtonDisabled(false);
   };
 
   const updateBankHistory = () => {
@@ -276,7 +289,9 @@ function App() {
             <div>Выбрано: <span>{playerBets}</span> долларов</div>
             <button onClick={startGame}>Подтвердить ставку</button>
           </div>
-        ) : null}
+        ) : (
+          <button onClick={() => setShowBetAmount(true)} disabled={isBetButtonDisabled}>Выбрать ставку</button>
+        )}
   
         {cardsDealt && playerCards.length > 0 && (
           <div className="cards-section">
@@ -304,7 +319,7 @@ function App() {
       </div>
   
       <div className="chart-section" style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px' }}>
-        <div style={{ width: '300px', height: '300px' }}>
+          <div style={{ width: '300px', height: '300px' }}>
           <h2>Деньги</h2>
           <Line data={chartDataLine} options={{ maintainAspectRatio: false, responsive: true }} />
         </div>
