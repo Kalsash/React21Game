@@ -176,34 +176,31 @@ function App() {
   };
 
   const determineWinner = () => {
-    let message;
-
     if (bankerScoreRef.current > 21) {
-      message = "Банкир перебрал! Вы выиграли.";
+      showResult("Банкир перебрал! Вы выиграли.");
       setBankAmount(prev => prev + playerBets * 2);
       setResultsCount(prev => ({ ...prev, wins: prev.wins + 1 }));
       updateBankHistory();
     } else if (playerScoreRef.current > bankerScoreRef.current) {
-      message = "Поздравляем! Вы выиграли.";
+      showResult("Поздравляем! Вы выиграли.");
       setBankAmount(prev => prev + playerBets * 2);
       setResultsCount(prev => ({ ...prev, wins: prev.wins + 1 }));
       updateBankHistory();
     } else if (playerScoreRef.current < bankerScoreRef.current) {
-      message = "Вы проиграли!";
+      showResult("Вы проиграли!");
       setResultsCount(prev => ({ ...prev, losses: prev.losses + 1 }));
       updateBankHistory();
     } else {
-      message = "Ничья, ваши ставки возвращаются.";
+      showResult( "Ничья, ваши ставки возвращаются.");
       setBankAmount(prev => prev + playerBets);
       setResultsCount(prev => ({ ...prev, ties: prev.ties + 1 }));
       updateBankHistory();
     }
 
-    showResult(message);
-    const historyEntry = { result: message, bankAmount, playerScore: playerScoreRef.current, bankerScore: bankerScoreRef.current, playerBets };
+    const historyEntry = {bankAmount, playerScore: playerScoreRef.current, bankerScore: bankerScoreRef.current, playerBets };
     setGameHistory(prev => [...prev, historyEntry]);
     setCardsDealt(false);
-    setIsBetButtonDisabled(false);
+   
 
     if (bankAmount <= 0) {
       setTimeout(() => {
@@ -214,7 +211,6 @@ function App() {
   };
 
   const showResult = (message) => {
-    //setIsBetButtonDisabled(true);
     setResultMessage(message);
     if (bankAmount < 100) {
       setTimeout(() => {
@@ -226,7 +222,6 @@ function App() {
         resetGame();
         setResultMessage('');
       }, 1000);
-      //setIsBetButtonDisabled(false);
     }
   };
 
@@ -291,20 +286,28 @@ function App() {
             onChange={e => setPlayerBets(parseInt(e.target.value))}
           />
           <div>Выбрано: <span>{playerBets}</span> долларов</div>
-          <button onClick={startGame} disabled={isBetButtonDisabled}>Подтвердить ставку</button>
+      
+            {/* Условный рендеринг для кнопки */}
+  {!isBetButtonDisabled && (
+    <button onClick={startGame}>Подтвердить ставку</button>
+  )}
         </div>
 
         {cardsDealt && playerCards.length > 0 && (
-          <div className="cards-section">
-            <h2>Ваши карты:</h2>
-            <div>{playerCards.map(card => <img key={card.code} src={card.image} alt={card.value} className="card" />)}</div>
-            <div>Очки: <span>{playerScoreRef.current}</span></div>
-            <div className="buttons">
-              <button onClick={drawPlayerCard} disabled={isBankerTurn}>Взять карту</button>
-              <button onClick={endPlayerTurn} disabled={isBankerTurn}>Остановиться</button>
-            </div>
-          </div>
-        )}
+  <div className="cards-section">
+    <h2>Ваши карты:</h2>
+    <div>{playerCards.map(card => <img key={card.code} src={card.image} alt={card.value} className="card" />)}</div>
+    <div>Очки: <span>{playerScoreRef.current}</span></div>
+    <div className="buttons">
+      {!isBankerTurn && (
+        <>
+          <button onClick={drawPlayerCard}>Взять карту</button>
+          <button onClick={endPlayerTurn}>Остановиться</button>
+        </>
+      )}
+    </div>
+  </div>
+)}
 
         {cardsDealt && bankerCards.length > 0 && (
           <div className="cards-section">
