@@ -115,7 +115,6 @@ function App() {
       const card = data.cards[0];
       setBankerCards(prev => [...prev, card]);
       bankerScoreRef.current += getCardValue(card);
-      checkBankerScore();
     } catch (error) {
       console.error("Ошибка при вытаскивании карты банкира: ", error);
       alert("Не удалось вытащить карту банкира. Попробуйте еще раз.");
@@ -152,14 +151,6 @@ function App() {
 
   };
 
-  const checkBankerScore = () => {
-    if (bankerScoreRef.current > 21) {
-      showResult("Банкир перебрал! Вы выиграли.");
-      setResultsCount(prev => ({ ...prev, wins: prev.wins + 1 }));
-      setCardsDealt(false);
-      updateBankHistory();
-    }
-  };
 
   const endPlayerTurn = () => {
     playBankerTurn();
