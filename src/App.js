@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Pie, Line } from 'react-chartjs-2'; // Импортируем круговую диаграмму и линейный график
+import { Pie, Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
   ArcElement,
@@ -9,7 +9,7 @@ import {
   PointElement,
   LinearScale,
   CategoryScale,
-} from 'chart.js';  // Импортируем необходимые модули Chart.js
+} from 'chart.js';
 import './App.css';
 
 // Регистрируем компоненты
@@ -33,14 +33,12 @@ function App() {
   const [playerBets, setPlayerBets] = useState(100);
   const [gameHistory, setGameHistory] = useState([]);
   const [resultMessage, setResultMessage] = useState('');
-  const [showBetAmount, setShowBetAmount] = useState(false);
   const [resultsCount, setResultsCount] = useState({ wins: 0, losses: 0, ties: 0 });
   const [cardsDealt, setCardsDealt] = useState(false);
-  const [buttonsDisabled, setButtonsDisabled] = useState(false);
-  const [bankHistory, setBankHistory] = useState([]); // Для графика подсчета банка
-  const [isBetButtonDisabled, setIsBetButtonDisabled] = useState(false); // Новое состояние для кнопки
+  const [isBankerTurn, setIsBankerTurn] = useState(false);
+  const [bankHistory, setBankHistory] = useState([]);
+  const [isBetButtonDisabled, setIsBetButtonDisabled] = useState(false);
 
-  // Эффект для загрузки колоды карт после монтирования
   useEffect(() => {
     const fetchDeck = async () => {
       try {
@@ -62,14 +60,13 @@ function App() {
       return;
     }
 
-    setIsBetButtonDisabled(true); // Отключаем кнопку "Выбрать ставку"
-    setShowBetAmount(false);
+    setIsBetButtonDisabled(true);
     setPlayerCards([]);
     setBankerCards([]);
     playerScoreRef.current = 0;
     bankerScoreRef.current = 0;
     setCardsDealt(false);
-    
+
     try {
       await drawPlayerCard();
       await drawBankerCard();
@@ -82,7 +79,7 @@ function App() {
   };
 
   const drawPlayerCard = async () => {
-    if (!deckId) return;
+    if (!deckId || isBankerTurn) return; // Не даем взять карту, если банкир на ход
 
     try {
       const response = await fetch(`https://deckofcardsapi.com/api/deck/${deckId}/draw/?count=1`);
@@ -134,18 +131,24 @@ function App() {
   };
 
   const checkPlayerScore = async () => {
+    setIsBankerTurn(true);
     if (playerScoreRef.current > 21) {
-      await new Promise(resolve => setTimeout(resolve, 1000)); 
+      await new Promise(resolve => setTimeout(resolve, 1000));
       showResult("Перебор! Вы проиграли.");
       setResultsCount(prev => ({ ...prev, losses: prev.losses + 1 }));
       setCardsDealt(false);
       updateBankHistory();
+      setIsBankerTurn(false);
     } else if (playerScoreRef.current === 21) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
       showResult("Поздравляем! Вы набрали 21 очко!");
       setBankAmount(prev => prev + playerBets * 2);
       setResultsCount(prev => ({ ...prev, wins: prev.wins + 1 }));
       updateBankHistory();
+      setIsBankerTurn(false);
     }
+    if (playerScoreRef.current < 21)
+      setIsBankerTurn(false);
 
   };
 
@@ -156,7 +159,6 @@ function App() {
       setCardsDealt(false);
       updateBankHistory();
     }
-
   };
 
   const endPlayerTurn = () => {
@@ -164,11 +166,13 @@ function App() {
   };
 
   const playBankerTurn = async () => {
+    setIsBankerTurn(true); // Начинается ход банкира
     while (bankerScoreRef.current < 17) {
       await drawBankerCard();
-      await new Promise(resolve => setTimeout(resolve, 1000)); 
+      await new Promise(resolve => setTimeout(resolve, 1000));
     }
     determineWinner();
+    setIsBankerTurn(false); // Ход банкира закончен
   };
 
   const determineWinner = () => {
@@ -195,12 +199,10 @@ function App() {
       updateBankHistory();
     }
 
-    setResultMessage(message);
+    showResult(message);
     const historyEntry = { result: message, bankAmount, playerScore: playerScoreRef.current, bankerScore: bankerScoreRef.current, playerBets };
     setGameHistory(prev => [...prev, historyEntry]);
     setCardsDealt(false);
-
-    // Включаем кнопку "Выбрать ставку" в конце партии
     setIsBetButtonDisabled(false);
 
     if (bankAmount <= 0) {
@@ -212,6 +214,7 @@ function App() {
   };
 
   const showResult = (message) => {
+    //setIsBetButtonDisabled(true);
     setResultMessage(message);
     if (bankAmount < 100) {
       setTimeout(() => {
@@ -219,7 +222,11 @@ function App() {
         window.location.reload();
       }, 2000);
     } else {
-      setTimeout(resetGame, 2000);
+      setTimeout(() => {
+        resetGame();
+        setResultMessage('');
+      }, 1000);
+      //setIsBetButtonDisabled(false);
     }
   };
 
@@ -228,11 +235,8 @@ function App() {
     setBankerCards([]);
     playerScoreRef.current = 0;
     bankerScoreRef.current = 0;
-    setShowBetAmount(true);
     setCardsDealt(false);
-
-    // Включаем кнопку "Выбрать ставку"
-    setIsBetButtonDisabled(false);
+    setIsBetButtonDisabled(false); // Включаем кнопки после сброса игры
   };
 
   const updateBankHistory = () => {
@@ -275,36 +279,33 @@ function App() {
       <div className="container">
         <h1>Игра в 21 очко</h1>
         <div>Деньги: <span>{bankAmount}</span> долларов</div>
-        {showBetAmount ? (
-          <div>
-            <h2>Ставка:</h2>
-            <input
-              type="range"
-              min="100"
-              max={bankAmount}
-              step="100"
-              value={playerBets}
-              onChange={e => setPlayerBets(parseInt(e.target.value))}
-            />
-            <div>Выбрано: <span>{playerBets}</span> долларов</div>
-            <button onClick={startGame}>Подтвердить ставку</button>
-          </div>
-        ) : (
-          <button onClick={() => setShowBetAmount(true)} disabled={isBetButtonDisabled}>Выбрать ставку</button>
-        )}
-  
+        
+        <div>
+          <h2>Ставка:</h2>
+          <input
+            type="range"
+            min="100"
+            max={bankAmount}
+            step="100"
+            value={playerBets}
+            onChange={e => setPlayerBets(parseInt(e.target.value))}
+          />
+          <div>Выбрано: <span>{playerBets}</span> долларов</div>
+          <button onClick={startGame} disabled={isBetButtonDisabled}>Подтвердить ставку</button>
+        </div>
+
         {cardsDealt && playerCards.length > 0 && (
           <div className="cards-section">
             <h2>Ваши карты:</h2>
             <div>{playerCards.map(card => <img key={card.code} src={card.image} alt={card.value} className="card" />)}</div>
             <div>Очки: <span>{playerScoreRef.current}</span></div>
             <div className="buttons">
-              <button onClick={drawPlayerCard} disabled={buttonsDisabled}>Взять карту</button>
-              <button onClick={endPlayerTurn} disabled={buttonsDisabled}>Остановиться</button>
+              <button onClick={drawPlayerCard} disabled={isBankerTurn}>Взять карту</button>
+              <button onClick={endPlayerTurn} disabled={isBankerTurn}>Остановиться</button>
             </div>
           </div>
         )}
-        
+
         {cardsDealt && bankerCards.length > 0 && (
           <div className="cards-section">
             <h2>Карты банкира:</h2>
@@ -312,20 +313,21 @@ function App() {
             <div>Очки: <span>{bankerScoreRef.current}</span></div>
           </div>
         )}
-        
+
         <div className={resultMessage ? '' : 'hidden'}>
           <p>{resultMessage}</p>
         </div>
       </div>
-  
-      <div className="chart-section" style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px' }}>
+      <div className="container2">
+        <div className="chart-section" style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px' }}>
           <div style={{ width: '300px', height: '300px' }}>
-          <h2>Деньги</h2>
-          <Line data={chartDataLine} options={{ maintainAspectRatio: false, responsive: true }} />
-        </div>
-        <div style={{ width: '300px', height: '300px' }}>
-          <h2>История партий</h2>
-          <Pie data={chartDataPie} options={{ maintainAspectRatio: false, responsive: true }} />
+            <h2>Деньги</h2>
+            <Line data={chartDataLine} options={{ maintainAspectRatio: false, responsive: true }} />
+          </div>
+          <div style={{ width: '300px', height: '500px', marginLeft:"140px" }}>
+            <h2>История партий</h2>
+            <Pie data={chartDataPie} options={{ maintainAspectRatio: false, responsive: true }} />
+          </div>
         </div>
       </div>
     </body>
