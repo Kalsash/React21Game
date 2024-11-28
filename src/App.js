@@ -1,5 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Pie, Line } from 'react-chartjs-2';
+import React, { useState, useRef } from 'react';
+import DeckLoader from './DeckLoader';
+import PlayerCards from './PlayerCards';
+import BankerCards from './BankerCards';
+import ChartContainer from './ChartContainer'; 
 import {
   Chart as ChartJS,
   ArcElement,
@@ -39,21 +42,6 @@ function App() {
   const [bankHistory, setBankHistory] = useState([]);
   const [isBetButtonDisabled, setIsBetButtonDisabled] = useState(false);
 
-  useEffect(() => {
-    const fetchDeck = async () => {
-      try {
-        const response = await fetch('https://deckofcardsapi.com/api/deck/new/shuffle/?deck_count=1');
-        const data = await response.json();
-        setDeckId(data.deck_id);
-      } catch (error) {
-        console.error("Ошибка при загрузке колоды: ", error);
-        alert("Не удалось загрузить колоду. Пожалуйста, попробуйте еще раз.");
-      }
-    };
-
-    fetchDeck();
-  }, []);
-
   const startGame = async () => {
     if (bankAmount < playerBets) {
       alert("У вас недостаточно денег для этой ставки.");
@@ -79,7 +67,7 @@ function App() {
   };
 
   const drawPlayerCard = async () => {
-    if (!deckId || isBankerTurn) return; // Не даем взять карту, если банкир на ход
+    if (!deckId || isBankerTurn) return;
 
     try {
       const response = await fetch(`https://deckofcardsapi.com/api/deck/${deckId}/draw/?count=1`);
@@ -146,24 +134,21 @@ function App() {
       updateBankHistory();
       setIsBankerTurn(false);
     }
-    if (playerScoreRef.current < 21)
-      setIsBankerTurn(false);
-
+    if (playerScoreRef.current < 21) setIsBankerTurn(false);
   };
-
 
   const endPlayerTurn = () => {
     playBankerTurn();
   };
 
   const playBankerTurn = async () => {
-    setIsBankerTurn(true); // Начинается ход банкира
+    setIsBankerTurn(true);
     while (bankerScoreRef.current < 17) {
       await drawBankerCard();
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
     determineWinner();
-    setIsBankerTurn(false); // Ход банкира закончен
+    setIsBankerTurn(false);
   };
 
   const determineWinner = () => {
@@ -182,16 +167,20 @@ function App() {
       setResultsCount(prev => ({ ...prev, losses: prev.losses + 1 }));
       updateBankHistory();
     } else {
-      showResult( "Ничья, ваши ставки возвращаются.");
+      showResult("Ничья, ваши ставки возвращаются.");
       setBankAmount(prev => prev + playerBets);
       setResultsCount(prev => ({ ...prev, ties: prev.ties + 1 }));
       updateBankHistory();
     }
 
-    const historyEntry = {bankAmount, playerScore: playerScoreRef.current, bankerScore: bankerScoreRef.current, playerBets };
+    const historyEntry = {
+      bankAmount,
+      playerScore: playerScoreRef.current,
+      bankerScore: bankerScoreRef.current,
+      playerBets
+    };
     setGameHistory(prev => [...prev, historyEntry]);
     setCardsDealt(false);
-   
 
     if (bankAmount <= 0) {
       setTimeout(() => {
@@ -222,50 +211,20 @@ function App() {
     playerScoreRef.current = 0;
     bankerScoreRef.current = 0;
     setCardsDealt(false);
-    setIsBetButtonDisabled(false); // Включаем кнопки после сброса игры
+    setIsBetButtonDisabled(false);
   };
 
   const updateBankHistory = () => {
     setBankHistory(prev => [...prev, bankAmount]);
   };
 
-  // Данные для круговой диаграммы
-  const chartDataPie = {
-    labels: ['Победы', 'Поражения', 'Ничьи'],
-    datasets: [
-      {
-        label: 'Количество игр',
-        data: [resultsCount.wins, resultsCount.losses, resultsCount.ties],
-        backgroundColor: [
-          'rgba(75, 192, 192, 0.6)',
-          'rgba(255, 99, 132, 0.6)',
-          'rgba(255, 206, 86, 0.6)',
-        ],
-        borderWidth: 1,
-      },
-    ],
-  };
-
-  // Данные для графика подсчетов банка в зависимости от партии
-  const chartDataLine = {
-    labels: bankHistory.map((_, index) => `Партию ${index + 1}`),
-    datasets: [
-      {
-        label: 'Деньги',
-        data: bankHistory,
-        fill: false,
-        borderColor: 'rgba(75, 192, 192, 1)',
-        tension: 0.1
-      },
-    ],
-  };
-
   return (
     <body>
+      <DeckLoader setDeckId={setDeckId} />
       <div className="container">
         <h1>Игра в 21 очко</h1>
         <div>Деньги: <span>{bankAmount}</span> долларов</div>
-        
+
         <div>
           <h2>Ставка:</h2>
           <input
@@ -277,53 +236,34 @@ function App() {
             onChange={e => setPlayerBets(parseInt(e.target.value))}
           />
           <div>Выбрано: <span>{playerBets}</span> долларов</div>
-      
-            {/* Условный рендеринг для кнопки */}
-  {!isBetButtonDisabled && (
-    <button onClick={startGame}>Подтвердить ставку</button>
-  )}
+
+          {!isBetButtonDisabled && (
+            <button onClick={startGame}>Подтвердить ставку</button>
+          )}
         </div>
 
         {cardsDealt && playerCards.length > 0 && (
-  <div className="cards-section">
-    <h2>Ваши карты:</h2>
-    <div>{playerCards.map(card => <img key={card.code} src={card.image} alt={card.value} className="card" />)}</div>
-    <div>Очки: <span>{playerScoreRef.current}</span></div>
-    <div className="buttons">
-      {!isBankerTurn && (
-        <>
-          <button onClick={drawPlayerCard}>Взять карту</button>
-          <button onClick={endPlayerTurn}>Остановиться</button>
-        </>
-      )}
-    </div>
-  </div>
-)}
+          <PlayerCards 
+            playerCards={playerCards} 
+            playerScore={playerScoreRef.current} 
+            drawPlayerCard={drawPlayerCard} 
+            endPlayerTurn={endPlayerTurn} 
+            isBankerTurn={isBankerTurn} 
+          />
+        )}
 
         {cardsDealt && bankerCards.length > 0 && (
-          <div className="cards-section">
-            <h2>Карты банкира:</h2>
-            <div>{bankerCards.map(card => <img key={card.code} src={card.image} alt={card.value} className="card" />)}</div>
-            <div>Очки: <span>{bankerScoreRef.current}</span></div>
-          </div>
+          <BankerCards 
+            bankerCards={bankerCards} 
+            bankerScore={bankerScoreRef.current} 
+          />
         )}
 
         <div className={resultMessage ? '' : 'hidden'}>
           <p>{resultMessage}</p>
         </div>
       </div>
-      <div className="container2">
-        <div className="chart-section" style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px' }}>
-          <div style={{ width: '300px', height: '300px' }}>
-            <h2>Деньги</h2>
-            <Line data={chartDataLine} options={{ maintainAspectRatio: false, responsive: true }} />
-          </div>
-          <div style={{ width: '300px', height: '500px', marginLeft:"140px" }}>
-            <h2>История партий</h2>
-            <Pie data={chartDataPie} options={{ maintainAspectRatio: false, responsive: true }} />
-          </div>
-        </div>
-      </div>
+      <ChartContainer resultsCount={resultsCount} bankHistory={bankHistory} />
     </body>
   );
 }
